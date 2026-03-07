@@ -1,0 +1,15 @@
+/* ─── Liquid Glass — CSS custom properties ───────────────────────────────── */
+
+:root {
+  --c-glass:            #bbbbbc;
+  --c-light:            #fff;
+  --c-dark:             #000;
+  --glass-reflex-dark:  1;
+  --glass-reflex-light: 1;
+  --glass-saturation:   180%;
+}
+
+.dark {
+  --glass-reflex-dark:  2;
+  --glass-reflex-light: 0.3;
+}
