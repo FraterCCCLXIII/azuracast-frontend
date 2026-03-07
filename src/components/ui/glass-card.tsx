@@ -42,10 +42,10 @@ export function GlassCard({
       <div
         className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg"
         style={{
-          backdropFilter: "url(#glass-filter) blur(16px) saturate(180%)",
+          backdropFilter: "url(#glass-filter) blur(16px)",
           // Safari / Firefox don't support url() in backdrop-filter; fall back
-          // to plain blur + saturate so the frosted look still works there.
-          WebkitBackdropFilter: "blur(16px) saturate(180%)",
+          // to plain blur so the frosted look still works there.
+          WebkitBackdropFilter: "blur(16px)",
         }}
         aria-hidden="true"
       />
@@ -58,14 +58,14 @@ export function GlassCard({
         )}
         style={{
           boxShadow: [
-            "inset 0 0 0 1px rgba(255,255,255,0.12)",
-            "inset 1.8px 3px 0px -2px rgba(255,255,255,0.85)",
-            "inset -2px -2px 0px -2px rgba(255,255,255,0.75)",
-            "inset -3px -8px 1px -6px rgba(255,255,255,0.55)",
-            "inset -0.3px -1px 4px 0px rgba(0,0,0,0.12)",
-            "inset -1.5px 2.5px 0px -2px rgba(0,0,0,0.18)",
-            "inset 0px 3px 4px -2px rgba(0,0,0,0.18)",
-            "inset 2px -6.5px 1px -4px rgba(0,0,0,0.09)",
+            // "inset 0 0 0 1px rgba(255,255,255,0.12)",
+            // "inset 1.8px 3px 0px -2px rgba(255,255,255,0.85)",
+            // "inset -2px -2px 0px -2px rgba(255,255,255,0.75)",
+            // "inset -3px -8px 1px -6px rgba(255,255,255,0.55)",
+            // "inset -0.3px -1px 4px 0px rgba(0,0,0,0.12)",
+            // "inset -1.5px 2.5px 0px -2px rgba(0,0,0,0.18)",
+            // "inset 0px 3px 4px -2px rgba(0,0,0,0.18)",
+            // "inset 2px -6.5px 1px -4px rgba(0,0,0,0.09)",
             "0px 1px 5px 0px rgba(0,0,0,0.1)",
             "0px 6px 16px 0px rgba(0,0,0,0.08)",
           ].join(", "),

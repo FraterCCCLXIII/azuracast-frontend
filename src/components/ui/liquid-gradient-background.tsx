@@ -113,7 +113,6 @@ type TypedUniforms = {
   uSpeed: { value: number };
   uIntensity: { value: number };
   uTouchTexture: { value: THREE.Texture };
-  uGrainIntensity: { value: number };
   uGradientSize: { value: number };
   uGradientCount: { value: number };
   uColor1Weight: { value: number };
@@ -172,18 +171,12 @@ const FRAGMENT_SHADER = `
   uniform float uSpeed;
   uniform float uIntensity;
   uniform sampler2D uTouchTexture;
-  uniform float uGrainIntensity;
   uniform float uGradientSize;
   uniform float uGradientCount;
   uniform float uColor1Weight;
   uniform float uColor2Weight;
 
   varying vec2 vUv;
-
-  float grain(vec2 uv, float time) {
-    vec2 g = uv * uResolution * 0.5;
-    return fract(sin(dot(g + time, vec2(12.9898, 78.233))) * 43758.5453) * 2.0 - 1.0;
-  }
 
   vec3 getGradientColor(vec2 uv, float time,
     vec3 c1, vec3 c2, vec3 c3, vec3 c4, vec3 c5, vec3 c6, vec3 navy) {
@@ -290,8 +283,6 @@ const FRAGMENT_SHADER = `
 
     vec3 color = getGradientColor(uv, uTime, c1, c2, c3, c4, c5, c6, navy);
 
-    color += grain(uv, uTime) * uGrainIntensity;
-
     float ts = uTime * 0.5;
     color.r += sin(ts) * 0.02;
     color.g += cos(ts * 1.4) * 0.02;
@@ -323,6 +314,7 @@ export function LiquidGradientBackground({
   songId,
 }: LiquidGradientBackgroundProps) {
   const mountRef = useRef<HTMLDivElement>(null);
+  const grainRef = useRef<HTMLCanvasElement>(null);
 
   // Signal from outside the Three.js loop to trigger a cycle
   const triggerCycleRef = useRef(false);
@@ -434,7 +426,6 @@ export function LiquidGradientBackground({
       uSpeed: { value: initialConfig.speed },
       uIntensity: { value: 1.8 },
       uTouchTexture: { value: touchTexture },
-      uGrainIntensity: { value: 0.08 },
       uGradientSize: { value: initialConfig.gradientSize },
       uGradientCount: { value: initialConfig.gradientCount },
       uColor1Weight: { value: initialConfig.color1Weight },
@@ -544,8 +535,6 @@ export function LiquidGradientBackground({
         uniforms.uIntensity.value = baseIntensity + amplitude * 1.5;
         // Blobs expand/contract with mids
         uniforms.uGradientSize.value = baseGradientSize + mid * 0.6;
-        // Grain texture intensifies on high frequencies
-        uniforms.uGrainIntensity.value = 0.08 + high * 0.18;
         // Primary color punches harder on beat
         uniforms.uColor1Weight.value = getSchemeConfig(ALL_SCHEMES[currentSchemeIndex]).color1Weight + bass * 1.2;
       }
@@ -589,11 +578,65 @@ export function LiquidGradientBackground({
     };
   }, [scheme, analyserRef]);
 
+  // 2D canvas film grain — completely independent of the WebGL gradient so
+  // intensity never varies with gradient brightness.
+  useEffect(() => {
+    const canvas = grainRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d")!;
+    let animId: number;
+    const FPS = 24;
+    const INTERVAL = 1000 / FPS;
+    let lastTime = 0;
+
+    const resize = () => {
+      const dpr = window.devicePixelRatio ?? 1;
+      canvas.width = Math.ceil(window.innerWidth * dpr);
+      canvas.height = Math.ceil(window.innerHeight * dpr);
+    };
+    resize();
+
+    const render = (time: number) => {
+      animId = requestAnimationFrame(render);
+      if (time - lastTime < INTERVAL) return;
+      lastTime = time;
+
+      const w = canvas.width;
+      const h = canvas.height;
+      const imageData = ctx.createImageData(w, h);
+      const d = imageData.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const v = Math.floor(Math.random() * 256);
+        d[i] = v;
+        d[i + 1] = v;
+        d[i + 2] = v;
+        d[i + 3] = 255;
+      }
+      ctx.putImageData(imageData, 0, 0);
+    };
+
+    animId = requestAnimationFrame(render);
+    window.addEventListener("resize", resize);
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener("resize", resize);
+    };
+  }, []);
+
   return (
-    <div
-      ref={mountRef}
-      className="pointer-events-none fixed inset-0 z-0"
-      aria-hidden="true"
-    />
+    <>
+      <div
+        ref={mountRef}
+        className="pointer-events-none fixed inset-0 z-0"
+        aria-hidden="true"
+      />
+      <canvas
+        ref={grainRef}
+        className="pointer-events-none fixed inset-0 z-[1] h-full w-full"
+        style={{ mixBlendMode: "overlay", opacity: 0.15 }}
+        aria-hidden="true"
+      />
+    </>
   );
 }

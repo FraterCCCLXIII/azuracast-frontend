@@ -125,3 +125,67 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ─── Custom scrollbar ──────────────────────────────────────────────────── */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(0 0 0 / 0.18) transparent;
+}
+.dark {
+  scrollbar-color: rgb(255 255 255 / 0.22) transparent;
+}
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(0 0 0 / 0.18);
+  border-radius: 9999px;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 0.22);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(0 0 0 / 0.32);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgb(255 255 255 / 0.38);
+}
+
+/* ─── Track list slide animations ──────────────────────────────────────── */
+@keyframes track-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes track-slide-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+    max-height: 56px;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+    max-height: 0;
+  }
+}
+
+.track-slide-in {
+  animation: track-slide-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.track-slide-out {
+  animation: track-slide-out 0.35s cubic-bezier(0.55, 0, 1, 0.45) both;
+  overflow: hidden;
+  pointer-events: none;
+}

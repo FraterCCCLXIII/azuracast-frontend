@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { GlassFilter } from "@/components/ui/glass-filter";
 import { LiquidGradientBackground, type GradientScheme } from "@/components/ui/liquid-gradient-background";
-import { EllipsisVertical, History, ListPlus, Pause, Play, Radio, Volume2, VolumeX } from "lucide-react";
+import { EllipsisVertical, History, ListPlus, Pause, Play, Radio, Volume2, VolumeX, X } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -79,6 +79,17 @@ function formatDuration(totalSeconds?: number): string {
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
+
+function formatTimeAgo(unixSeconds: number): string {
+  const diffMs = Date.now() - unixSeconds * 1000;
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  return `${diffHr}h ago`;
+}
+
 
 function getStreamStorageKey(stationCode: string): string {
   return `${STREAM_KEY_PREFIX}-${stationCode}`;
@@ -237,6 +248,7 @@ export function ListenerDashboard({ stationShortName }: ListenerDashboardProps) 
     page: requestPage,
     perPage: 25,
   });
+
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -463,7 +475,71 @@ export function ListenerDashboard({ stationShortName }: ListenerDashboardProps) 
           <div className="absolute inset-0 bg-background/70" />
         </div>
       )}
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col justify-center gap-6 px-4 py-6 sm:px-6 lg:py-10">
+      <div className="relative z-10 flex min-h-screen">
+        {/* Push drawer — history panel */}
+        <aside
+          aria-label="Recent tracks history"
+          className={`sticky top-0 h-dvh flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${historyDrawerOpen ? "w-80" : "w-0"}`}
+        >
+          <div className="flex h-dvh w-80 flex-col border-r border-border bg-background/80 backdrop-blur-xl">
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+              <div>
+                <p className="text-sm font-semibold">Recent Tracks</p>
+                <p className="text-xs text-muted-foreground">History from current station feed</p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="rounded-full"
+                onClick={() => setHistoryDrawerOpen(false)}
+                aria-label="Close recent tracks"
+              >
+                <X />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              {history.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No track history available yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {history.map((entry) => (
+                    <div key={`${entry.played_at}-${entry.song.id}`} className="space-y-2">
+                      <div className="flex items-center gap-3">
+                        <div className="h-12 w-12 shrink-0 overflow-hidden rounded bg-muted">
+                          {entry.song.art ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={entry.song.art}
+                              alt={entry.song.text}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                              No art
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium leading-snug">{entry.song.title}</p>
+                          <p className="truncate text-xs text-muted-foreground">{entry.song.artist}</p>
+                          <p className="mt-0.5 text-[10px] tabular-nums text-muted-foreground/50">
+                            {formatTimeAgo(entry.played_at)}
+                          </p>
+                        </div>
+                      </div>
+                      <Separator />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </aside>
+
+        {/* Main content */}
+        <div className="flex flex-1 flex-col">
+        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center gap-6 px-4 py-6 sm:px-6 lg:py-10">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -535,6 +611,7 @@ export function ListenerDashboard({ stationShortName }: ListenerDashboardProps) 
               <PopoverContent
                 align="end"
                 className="w-80 space-y-4"
+                onOpenAutoFocus={(e) => e.preventDefault()}
                 onInteractOutside={(e) => {
                   const target = e.target as Element | null;
                   if (target?.closest("[data-radix-popper-content-wrapper]")) {
@@ -645,7 +722,7 @@ export function ListenerDashboard({ stationShortName }: ListenerDashboardProps) 
           </div>
         ) : (
           <div className="grid gap-6">
-            {/* <GlassCard> */}
+            <GlassCard className="bg-white/30 dark:bg-white/10">
               <CardContent className="space-y-5">
                 {error && !nowPlaying ? (
                   <div className="space-y-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4">
@@ -726,58 +803,17 @@ export function ListenerDashboard({ stationShortName }: ListenerDashboardProps) 
                         {isPlaying ? <Pause /> : <Play />}
                         {isPlaying ? "Pause stream" : "Play stream"}
                       </Button>
-                      <Dialog open={historyDrawerOpen} onOpenChange={setHistoryDrawerOpen}>
-                        <DialogTrigger asChild>
-                          <Button type="button" variant="ghost" size="icon" className="rounded-full bg-foreground/5 hover:bg-foreground/8 shadow-none" aria-label="Recent tracks">
-                            <History />
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="left-0 top-0 h-dvh w-[90vw] max-w-md translate-x-0 translate-y-0 rounded-none border-r p-0 sm:max-w-md">
-                          <DialogHeader className="border-b px-5 py-4">
-                            <DialogTitle>Recent Tracks</DialogTitle>
-                            <DialogDescription>History from current station feed</DialogDescription>
-                          </DialogHeader>
-                          <div className="h-[calc(100dvh-80px)] overflow-y-auto px-5 py-4">
-                            {history.length === 0 ? (
-                              <p className="text-sm text-muted-foreground">
-                                No track history available yet.
-                              </p>
-                            ) : (
-                              <div className="space-y-3">
-                                {history.map((entry) => (
-                                  <div key={`${entry.played_at}-${entry.song.id}`} className="space-y-2">
-                                    <div className="flex items-center gap-3">
-                                      <div className="h-12 w-12 shrink-0 overflow-hidden rounded bg-muted">
-                                        {entry.song.art ? (
-                                          // eslint-disable-next-line @next/next/no-img-element
-                                          <img
-                                            src={entry.song.art}
-                                            alt={entry.song.text}
-                                            className="h-full w-full object-cover"
-                                          />
-                                        ) : (
-                                          <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
-                                            No art
-                                          </div>
-                                        )}
-                                      </div>
-                                      <div className="min-w-0">
-                                        <p className="truncate text-sm font-medium leading-snug">
-                                          {entry.song.title}
-                                        </p>
-                                        <p className="truncate text-xs text-muted-foreground">
-                                          {entry.song.artist}
-                                        </p>
-                                      </div>
-                                    </div>
-                                    <Separator />
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </DialogContent>
-                      </Dialog>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="rounded-full bg-foreground/5 hover:bg-foreground/8 shadow-none"
+                        aria-label="Recent tracks"
+                        aria-expanded={historyDrawerOpen}
+                        onClick={() => setHistoryDrawerOpen((v) => !v)}
+                      >
+                        <History />
+                      </Button>
                       <Popover>
                         <PopoverTrigger asChild>
                           <Button
@@ -1005,7 +1041,8 @@ export function ListenerDashboard({ stationShortName }: ListenerDashboardProps) 
                   </div>
                 </div>
               </CardContent>
-            {/* </GlassCard> */}
+            </GlassCard>
+
 
           </div>
         )}
@@ -1018,8 +1055,10 @@ export function ListenerDashboard({ stationShortName }: ListenerDashboardProps) 
           onPause={() => setIsPlaying(false)}
           onPlay={() => setIsPlaying(true)}
         />
-      </div>
-      {/* <GlassFilter /> */}
+        </div>{/* end max-w-6xl content */}
+        </div>{/* end flex-1 main column */}
+      </div>{/* end flex min-h-screen z-10 row */}
+      <GlassFilter />
     </div>
   );
 }
