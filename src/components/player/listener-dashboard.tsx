@@ -1093,7 +1093,6 @@ export function ListenerDashboard({ stationShortName }: ListenerDashboardProps) 
           songTitle={currentSong?.title}
           songArtist={currentSong?.artist}
           songArt={currentSong?.art}
-          streamUrl={effectiveStreamUrl ?? undefined}
         />
 
         <audio
