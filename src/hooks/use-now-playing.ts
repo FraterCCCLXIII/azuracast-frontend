@@ -21,6 +21,8 @@ interface UseNowPlayingResult {
 const DEFAULT_POLL_MS = 20000;
 const SSE_FALLBACK_DELAY_MS = 3000;
 const FAILURE_THRESHOLD = 3;
+const SSE_RECONNECT_MIN_MS = 1000;
+const SSE_RECONNECT_MAX_MS = 30000;
 
 export function useNowPlaying(
   options: UseNowPlayingOptions = {}
@@ -60,6 +62,20 @@ export function useNowPlaying(
     }
   }, [stationShortName]);
 
+  // Re-fetch immediately when the user returns to the tab. Browsers throttle
+  // background timers, so polling alone cannot guarantee a fresh update.
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refresh();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [refresh]);
+
   useEffect(() => {
     if (!useSse || !stationShortName) {
       return;
@@ -67,11 +83,12 @@ export function useNowPlaying(
 
     let isMounted = true;
     let fallbackTimer: number | null = null;
+    let reconnectTimer: number | null = null;
+    let reconnectDelay = SSE_RECONNECT_MIN_MS;
+    let eventSource: EventSource | null = null;
 
     const applyPayload = (payload: AzuraCastNowPlaying) => {
-      if (!isMounted) {
-        return;
-      }
+      if (!isMounted) return;
       failureCountRef.current = 0;
       setNowPlaying(payload);
       setError(null);
@@ -79,70 +96,97 @@ export function useNowPlaying(
       setIsLoading(false);
     };
 
-    const sseBaseUrl = `${getApiBaseUrl()}/api/live/nowplaying/sse`;
-    const sseParams = new URLSearchParams({
-      cf_connect: JSON.stringify({
-        subs: {
-          [`station:${stationShortName}`]: {
-            recover: true,
+    const buildSseUrl = () => {
+      const sseBaseUrl = `${getApiBaseUrl()}/api/live/nowplaying/sse`;
+      const sseParams = new URLSearchParams({
+        cf_connect: JSON.stringify({
+          subs: {
+            [`station:${stationShortName}`]: { recover: true },
           },
-        },
-      }),
-    });
-    const eventSource = new EventSource(`${sseBaseUrl}?${sseParams.toString()}`);
+        }),
+      });
+      return `${sseBaseUrl}?${sseParams.toString()}`;
+    };
 
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data) as {
-          connect?: {
-            subs?: Record<
-              string,
-              {
-                publications?: Array<{ data?: { np?: AzuraCastNowPlaying } }>;
-              }
-            >;
+    const connect = () => {
+      if (!isMounted) return;
+
+      eventSource = new EventSource(buildSseUrl());
+
+      eventSource.onmessage = (event) => {
+        reconnectDelay = SSE_RECONNECT_MIN_MS;
+        try {
+          const data = JSON.parse(event.data) as {
+            connect?: {
+              subs?: Record<
+                string,
+                {
+                  publications?: Array<{ data?: { np?: AzuraCastNowPlaying } }>;
+                }
+              >;
+            };
+            pub?: { data?: { np?: AzuraCastNowPlaying } };
           };
-          pub?: { data?: { np?: AzuraCastNowPlaying } };
-        };
 
-        if (data.pub?.data?.np) {
-          window.clearTimeout(fallbackTimer ?? undefined);
-          fallbackTimer = window.setTimeout(() => {
-            applyPayload(data.pub!.data!.np!);
-          }, SSE_FALLBACK_DELAY_MS);
-          return;
-        }
-
-        if (!data.connect?.subs) {
-          return;
-        }
-
-        for (const key of Object.keys(data.connect.subs)) {
-          const publications = data.connect.subs[key]?.publications;
-          if (!publications || publications.length === 0) {
-            continue;
-          }
-          const initialNp = publications[0]?.data?.np;
-          if (initialNp) {
-            applyPayload(initialNp);
+          if (data.pub?.data?.np) {
+            window.clearTimeout(fallbackTimer ?? undefined);
+            fallbackTimer = window.setTimeout(() => {
+              applyPayload(data.pub!.data!.np!);
+            }, SSE_FALLBACK_DELAY_MS);
             return;
           }
+
+          if (!data.connect?.subs) return;
+
+          for (const key of Object.keys(data.connect.subs)) {
+            const publications = data.connect.subs[key]?.publications;
+            if (!publications || publications.length === 0) continue;
+            const initialNp = publications[0]?.data?.np;
+            if (initialNp) {
+              applyPayload(initialNp);
+              return;
+            }
+          }
+        } catch {
+          // Ignore malformed SSE payloads and rely on polling fallback.
         }
-      } catch {
-        // Ignore malformed SSE payloads and rely on polling fallback.
+      };
+
+      eventSource.onerror = () => {
+        eventSource?.close();
+        eventSource = null;
+        if (!isMounted) return;
+        // Exponential backoff reconnect so a temporary outage doesn't spam requests.
+        reconnectTimer = window.setTimeout(() => {
+          reconnectDelay = Math.min(reconnectDelay * 2, SSE_RECONNECT_MAX_MS);
+          connect();
+        }, reconnectDelay);
+      };
+    };
+
+    connect();
+
+    // When the user returns to the tab, skip any pending backoff and reconnect
+    // immediately so artwork and track info sync right away.
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && !eventSource) {
+        if (reconnectTimer !== null) {
+          window.clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
+        reconnectDelay = SSE_RECONNECT_MIN_MS;
+        connect();
       }
     };
 
-    eventSource.onerror = () => {
-      eventSource.close();
-    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       isMounted = false;
-      if (fallbackTimer) {
-        window.clearTimeout(fallbackTimer);
-      }
-      eventSource.close();
+      if (fallbackTimer) window.clearTimeout(fallbackTimer);
+      if (reconnectTimer) window.clearTimeout(reconnectTimer);
+      eventSource?.close();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [stationShortName, useSse]);
 
