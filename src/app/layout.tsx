@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "AzuraCast Listener Frontend",
   description: "Custom listener experience powered by AzuraCast.",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 const forceWhiteText = process.env.NEXT_PUBLIC_FORCE_WHITE_TEXT === "true";
