@@ -475,6 +475,19 @@ export function ListenerDashboard({ stationShortName }: ListenerDashboardProps) 
           <div className="absolute inset-0 bg-background/70" />
         </div>
       )}
+      {/* Texture overlay — multiply blend over the gradient */}
+      <div
+        className="pointer-events-none absolute inset-0 z-[1]"
+        style={{ mixBlendMode: "multiply" }}
+        aria-hidden="true"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/images/DYn6E6RXkAEgoRX.jpeg"
+          alt=""
+          className="h-full w-full object-cover opacity-55"
+        />
+      </div>
       <div className="relative z-10 flex min-h-screen">
         {/* Push drawer — history panel */}
         <aside
@@ -613,22 +626,18 @@ export function ListenerDashboard({ stationShortName }: ListenerDashboardProps) 
                 className="w-80 space-y-4"
                 onOpenAutoFocus={(e) => e.preventDefault()}
                 onInteractOutside={(e) => {
+                  // Keep open while any nested Select dropdown is visible (its portal
+                  // is outside the popover's DOM, so Radix fires onInteractOutside).
+                  if (document.querySelector("[data-slot='select-content']")) {
+                    e.preventDefault();
+                    return;
+                  }
                   const target = e.target as Element | null;
                   if (target?.closest("[data-radix-popper-content-wrapper]")) {
                     e.preventDefault();
                   }
                 }}
               >
-                {effectiveStreamUrl ? (
-                  <a
-                    href={effectiveStreamUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
-                  >
-                    Open stream URL
-                  </a>
-                ) : null}
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Station</p>
                   <Select
@@ -702,6 +711,19 @@ export function ListenerDashboard({ stationShortName }: ListenerDashboardProps) 
                     </SelectContent>
                   </Select>
                 </div>
+                {effectiveStreamUrl ? (
+                  <>
+                    <Separator />
+                    <a
+                      href={effectiveStreamUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+                    >
+                      Open stream URL
+                    </a>
+                  </>
+                ) : null}
               </PopoverContent>
             </Popover>
           </div>
