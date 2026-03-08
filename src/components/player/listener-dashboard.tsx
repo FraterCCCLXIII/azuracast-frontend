@@ -49,6 +49,7 @@ import { ShareModal } from "@/components/player/share-modal";
 
 interface ListenerDashboardProps {
   stationShortName?: string;
+  urlStation?: string;
 }
 
 interface StreamOption {
@@ -141,12 +142,12 @@ function StationWordmark() {
   );
 }
 
-export function ListenerDashboard({ stationShortName }: ListenerDashboardProps) {
+export function ListenerDashboard({ stationShortName, urlStation }: ListenerDashboardProps) {
   const [selectedStation, setSelectedStation] = useState<string>(() => {
     if (typeof window === "undefined") {
-      return stationShortName ?? "";
+      return urlStation ?? stationShortName ?? "";
     }
-    return window.localStorage.getItem(LAST_STATION_KEY) ?? stationShortName ?? "";
+    return urlStation ?? window.localStorage.getItem(LAST_STATION_KEY) ?? stationShortName ?? "";
   });
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(70);
@@ -157,7 +158,7 @@ export function ListenerDashboard({ stationShortName }: ListenerDashboardProps) 
     }
 
     const initialStation =
-      window.localStorage.getItem(LAST_STATION_KEY) ?? stationShortName ?? "";
+      urlStation ?? window.localStorage.getItem(LAST_STATION_KEY) ?? stationShortName ?? "";
     if (!initialStation) {
       return "";
     }
@@ -191,6 +192,9 @@ export function ListenerDashboard({ stationShortName }: ListenerDashboardProps) 
       return;
     }
     window.localStorage.setItem(LAST_STATION_KEY, selectedStation);
+    const url = new URL(window.location.href);
+    url.searchParams.set("station", selectedStation);
+    window.history.replaceState(null, "", url.toString());
   }, [selectedStation]);
 
   useEffect(() => {
