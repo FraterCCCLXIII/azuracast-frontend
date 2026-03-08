@@ -43,10 +43,11 @@ interface SocialCircleProps {
   label: string;
   href: string;
   color: string;
+  iconColor?: string;
   icon: React.ReactNode;
 }
 
-function SocialCircle({ label, href, color, icon }: SocialCircleProps) {
+function SocialCircle({ label, href, color, iconColor = "white", icon }: SocialCircleProps) {
   return (
     <a
       href={href}
@@ -54,8 +55,8 @@ function SocialCircle({ label, href, color, icon }: SocialCircleProps) {
       rel="noopener noreferrer"
       title={label}
       aria-label={`Share on ${label}`}
-      className="flex size-11 items-center justify-center rounded-full text-white transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-      style={{ backgroundColor: color }}
+      className="flex size-11 items-center justify-center rounded-full border border-border/40 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      style={{ backgroundColor: color, color: iconColor }}
     >
       {icon}
     </a>
@@ -93,7 +94,8 @@ export function ShareModal({
     {
       label: "X / Twitter",
       href: `https://x.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
-      color: "#000000",
+      color: "#ffffff",
+      iconColor: "#000000",
       icon: (
         <svg viewBox="0 0 24 24" className="size-4 fill-current" aria-hidden="true">
           <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.742l7.732-8.835L1.254 2.25H8.08l4.253 5.622L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z" />
