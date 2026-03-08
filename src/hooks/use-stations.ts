@@ -13,7 +13,8 @@ export function useStations() {
       try {
         const list = await fetchStations(controller.signal);
         setStations(list);
-      } catch {
+      } catch (err) {
+        console.warn("[useStations] Failed to load stations:", err);
         setStations([]);
       }
     };

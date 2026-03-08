@@ -57,7 +57,7 @@ async function requestJson<T>(path: string, signal?: AbortSignal): Promise<T> {
 export async function fetchNowPlayingAggregate(
   signal?: AbortSignal
 ): Promise<AzuraCastNowPlaying[]> {
-  return requestJson<AzuraCastNowPlaying[]>("/api/nowplaying", signal);
+  return requestJson<AzuraCastNowPlaying[]>("/api/azuracast/nowplaying", signal);
 }
 
 export async function fetchStationShortcodes(signal?: AbortSignal): Promise<string[]> {
@@ -104,7 +104,7 @@ export async function fetchNowPlayingByStation(
 ): Promise<AzuraCastNowPlaying | null> {
   try {
     return await requestJson<AzuraCastNowPlaying>(
-      `/api/nowplaying/${stationShortName}`,
+      `/api/azuracast/nowplaying/${stationShortName}`,
       signal
     );
   } catch (error) {
