@@ -210,7 +210,7 @@ export function ShareModal({
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Share on
           </p>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex justify-between">
             {socialLinks.map((link) => (
               <SocialCircle key={link.label} {...link} />
             ))}
