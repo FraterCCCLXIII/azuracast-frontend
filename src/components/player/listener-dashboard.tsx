@@ -380,6 +380,12 @@ export function ListenerDashboard({
       return;
     }
 
+    // While loading new station data, keep the current artwork visible rather
+    // than crossfading to a black/empty background mid-switch.
+    if (!artworkUrl && isLoading && backgroundArtwork) {
+      return;
+    }
+
     if (crossfadeTimeoutRef.current !== null) {
       window.clearTimeout(crossfadeTimeoutRef.current);
       crossfadeTimeoutRef.current = null;
@@ -403,7 +409,7 @@ export function ListenerDashboard({
       setArtworkCrossfading(false);
       crossfadeTimeoutRef.current = null;
     }, ARTWORK_CROSSFADE_MS + 20);
-  }, [artworkUrl, backgroundArtwork, nextBackgroundArtwork]);
+  }, [artworkUrl, backgroundArtwork, nextBackgroundArtwork, isLoading]);
 
   useEffect(() => {
     return () => {
@@ -673,7 +679,7 @@ export function ListenerDashboard({
               <StationWordmark />
             </h1>
             {stationOptions.length > 1 && (
-              <nav className="flex items-center gap-1.5" aria-label="Station switcher">
+              <nav className="flex items-center justify-start gap-1.5" aria-label="Station switcher">
                 {stationOptions.map((entry) => {
                   const isActive = selectedStation === entry.shortcode;
                   return (
@@ -697,7 +703,7 @@ export function ListenerDashboard({
                         }
                       }}
                       className={[
-                        "relative px-3 py-1.5 text-sm font-medium rounded-xl transition-all duration-200 overflow-hidden",
+                        "relative px-3 py-1.5 text-sm font-medium rounded-full transition-all duration-200 overflow-hidden",
                         isActive
                           ? "bg-white/40 text-foreground shadow-sm"
                           : "bg-white/15 text-foreground/70 hover:bg-white/25 hover:text-foreground",
@@ -770,9 +776,9 @@ export function ListenerDashboard({
           </div>
         </header>
 
-        {isLoading ? (
+        {isLoading && !nowPlaying ? (
           <div className="grid gap-6">
-            <Card>
+            <GlassCard className="bg-white/30 dark:bg-white/10">
               <CardHeader>
                 <Skeleton className="h-6 w-32" />
                 <Skeleton className="h-4 w-48" />
@@ -781,7 +787,7 @@ export function ListenerDashboard({
                 <Skeleton className="h-56 w-full" />
                 <Skeleton className="h-10 w-32" />
               </CardContent>
-            </Card>
+            </GlassCard>
           </div>
         ) : (
           <div className="grid gap-6">
