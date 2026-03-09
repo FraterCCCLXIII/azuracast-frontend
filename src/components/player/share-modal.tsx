@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Check, Copy, Mail } from "lucide-react";
 import {
   Dialog,
@@ -18,9 +18,17 @@ interface ShareModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   stationName?: string;
+  songId?: string;
   songTitle?: string;
   songArtist?: string;
   songArt?: string | null;
+  /**
+   * Explicit URL to share. When provided it overrides the current
+   * `window.location.href` — use this when the modal is opened from a
+   * context that has already cleaned up URL params (e.g. after closing
+   * the song detail modal).
+   */
+  shareUrl?: string;
 }
 
 const COPY_RESET_MS = 2000;
@@ -63,19 +71,66 @@ function SocialCircle({ label, href, color, iconColor = "white", icon }: SocialC
   );
 }
 
+type LinkType = "song" | "station";
+
+function stripSongParams(url: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.delete("song");
+    u.searchParams.delete("song_t");
+    u.searchParams.delete("song_a");
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 export function ShareModal({
   open,
   onOpenChange,
   stationName,
+  songId,
   songTitle,
   songArtist,
   songArt,
+  shareUrl,
 }: ShareModalProps) {
   const [copied, setCopied] = useState(false);
+  const [linkType, setLinkType] = useState<LinkType>("song");
 
-  const pageUrl =
-    typeof window !== "undefined" ? window.location.href : "";
-  const shareText = buildShareText(stationName, songTitle, songArtist);
+  const baseUrl = shareUrl ?? (typeof window !== "undefined" ? window.location.href : "");
+  const stationUrl = stripSongParams(baseUrl);
+
+  // If the caller has song info but the URL doesn't already have song params,
+  // synthesise the song URL ourselves (e.g. sharing from the main player bar).
+  const synthesisedSongUrl: string | undefined =
+    songId && songTitle && songArtist && baseUrl === stationUrl
+      ? (() => {
+          try {
+            const u = new URL(baseUrl);
+            u.searchParams.set("song", songId);
+            u.searchParams.set("song_t", songTitle);
+            u.searchParams.set("song_a", songArtist);
+            return u.toString();
+          } catch {
+            return undefined;
+          }
+        })()
+      : undefined;
+
+  const rawUrl = synthesisedSongUrl ?? baseUrl;
+  const hasSongLink = rawUrl !== stationUrl;
+
+  // Reset to "song" tab each time the modal opens
+  useEffect(() => {
+    if (open) setLinkType("song");
+  }, [open]);
+
+  const pageUrl = hasSongLink && linkType === "station" ? stationUrl : rawUrl;
+  const shareText =
+    hasSongLink && linkType === "station"
+      ? buildShareText(stationName)
+      : buildShareText(stationName, songTitle, songArtist);
   const encodedText = encodeURIComponent(shareText);
   const encodedUrl = encodeURIComponent(pageUrl);
 
@@ -175,6 +230,32 @@ export function ShareModal({
                 </p>
               )}
             </div>
+          </div>
+        )}
+
+        {hasSongLink && (
+          <div
+            role="tablist"
+            aria-label="Link type"
+            className="flex rounded-lg border border-border bg-muted/40 p-0.5 text-sm"
+          >
+            {(["song", "station"] as const).map((type) => (
+              <button
+                key={type}
+                role="tab"
+                type="button"
+                aria-selected={linkType === type}
+                onClick={() => { setLinkType(type); setCopied(false); }}
+                className={[
+                  "flex-1 rounded-md px-3 py-1.5 text-xs font-medium capitalize transition-colors",
+                  linkType === type
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                ].join(" ")}
+              >
+                {type === "song" ? "Song link" : "Station link"}
+              </button>
+            ))}
           </div>
         )}
 

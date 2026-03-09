@@ -92,3 +92,16 @@ export interface AzuraCastStatusResponse {
   message: string;
   formatted_message?: string;
 }
+
+export interface AzuraCastOnDemandItem {
+  /** Unique file ID — used in the download URL. */
+  track_id: string;
+  /** Relative URL for the file, e.g. `/api/station/1/ondemand/download/{track_id}`. */
+  download_url: string;
+  media: AzuraCastSong & {
+    album?: string;
+    genre?: string;
+    custom_fields?: Record<string, string>;
+  };
+  playlist: string;
+}

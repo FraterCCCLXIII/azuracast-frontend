@@ -1,5 +1,6 @@
 import {
   AzuraCastNowPlaying,
+  AzuraCastOnDemandItem,
   AzuraCastRequestItem,
   AzuraCastStatusResponse,
 } from "@/types/azuracast";
@@ -239,19 +240,160 @@ export async function fetchRequestableSongs(
   };
 }
 
+/**
+ * Converts an AzuraCast API-relative URL (e.g. `/api/station/1/ondemand/download/abc`)
+ * to the Next.js proxy path (e.g. `/api/azuracast/station/1/ondemand/download/abc`).
+ * Already-proxied URLs (`/api/azuracast/…`) are returned unchanged.
+ */
+export function toProxyUrl(apiUrl: string): string {
+  if (apiUrl.startsWith("/api/azuracast")) {
+    return apiUrl; // already a proxy URL
+  }
+  if (apiUrl.startsWith("/api/")) {
+    // /api/station/1/… → /api/azuracast/station/1/…
+    return `/api/azuracast${apiUrl.slice(4)}`;
+  }
+  return apiUrl;
+}
+
+/**
+ * Searches the on-demand list for a song matching the given ID.
+ * Returns the item (with a proxy-ready `download_url`) or null.
+ */
+export async function findOnDemandSong(
+  stationId: number,
+  songId: string,
+  searchTitle: string,
+  signal?: AbortSignal
+): Promise<AzuraCastOnDemandItem | null> {
+  try {
+    const searchParams = new URLSearchParams({
+      searchPhrase: searchTitle,
+      rowCount: "20",
+    });
+    const payload = await requestJson<
+      AzuraCastOnDemandItem[] | { rows?: AzuraCastOnDemandItem[] }
+    >(
+      `/api/azuracast/station/${stationId}/ondemand?${searchParams.toString()}`,
+      signal
+    );
+
+    const rows = Array.isArray(payload) ? payload : (payload.rows ?? []);
+    const match = rows.find((item) => item.media.id === songId) ?? null;
+
+    if (match) {
+      return { ...match, download_url: toProxyUrl(match.download_url) };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Searches the requestable songs list for a song matching the given ID.
+ * Uses the song title as the search phrase to reduce the result set before matching.
+ * Returns the first matching request item, or null if none found.
+ */
+export async function findRequestableSong(
+  stationId: number,
+  songId: string,
+  searchTitle: string,
+  signal?: AbortSignal
+): Promise<AzuraCastRequestItem | null> {
+  try {
+    console.debug("[findRequestableSong] fetching", { stationId, songId, searchTitle });
+    const result = await fetchRequestableSongs(
+      stationId,
+      { search: searchTitle, perPage: 20 },
+      signal
+    );
+    console.debug(
+      "[findRequestableSong] received",
+      result.rows.length,
+      "rows; IDs:",
+      result.rows.map((r) => r.song.id)
+    );
+    const match = result.rows.find((item) => item.song.id === songId) ?? null;
+    if (!match) {
+      console.debug("[findRequestableSong] no match for songId:", songId);
+    }
+    return match;
+  } catch (err) {
+    console.warn("[findRequestableSong] error:", err);
+    return null;
+  }
+}
+
+/** Strips AzuraCast's trailing " in file /var/… on line N" / " on /var/…" suffix. */
+function stripFilePath(msg: string): string {
+  return msg
+    .replace(/\s+in\s+file\s+\S+\s+on\s+line\s+\d+/i, "")
+    .replace(/\s+on\s+\/\S+/i, "")
+    .trim();
+}
+
+/**
+ * AzuraCast returns HTTP 500 errors in two formats:
+ *  - Plain text: "Error: Cannot submit request: <msg> on /var/azuracast/…"
+ *  - HTML page:  the exception message is embedded inside an HTML comment
+ *                `<!-- App\Exception\Http\CannotCompleteActionException: <msg>\n… -->`
+ *
+ * This helper tries the most specific patterns first, strips HTML when needed,
+ * and falls back gracefully rather than swallowing the real reason.
+ */
+function extractAzuraCastError(body: string): string {
+  // ── 1. "Cannot submit request: <msg>" anywhere (plain text or HTML comment) ──
+  const requestMatch = body.match(/Cannot submit request:\s*([^\n<]+)/i);
+  if (requestMatch?.[1]) {
+    return stripFilePath(requestMatch[1]);
+  }
+
+  // ── 2. Any known AzuraCast exception class with a message ───────────────────
+  const exceptionMatch = body.match(
+    /(?:CannotCompleteActionException|CannotProcessRequestException):\s*([^\n<]+)/i
+  );
+  if (exceptionMatch?.[1]) {
+    return stripFilePath(exceptionMatch[1]);
+  }
+
+  // ── 3. HTML body — strip tags, then search visible text ─────────────────────
+  if (body.includes("<")) {
+    const text = body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+
+    const textRequestMatch = text.match(/Cannot submit request:\s*([^.]+\.?)/i);
+    if (textRequestMatch?.[1]) return textRequestMatch[1].trim();
+
+    const textGenericMatch = text.match(/Error:\s*(.+?)(?:\s+on\s+\/|$)/i);
+    if (textGenericMatch?.[1]) return textGenericMatch[1].trim();
+
+    return "Unable to submit request. Please try again later.";
+  }
+
+  // ── 4. Plain-text fallback ───────────────────────────────────────────────────
+  const plain = body.trim();
+
+  const plainGenericMatch = plain.match(/^Error:\s*(.+?)(?:\s+on\s+\/|$)/im);
+  if (plainGenericMatch?.[1]) return plainGenericMatch[1].trim();
+
+  if (plain.length > 0 && plain.length < 300) return plain;
+
+  return "Unable to submit request. Please try again later.";
+}
+
 export async function submitSongRequest(
   requestUrl: string,
   signal?: AbortSignal
 ): Promise<AzuraCastStatusResponse> {
-  const normalizedPath = requestUrl.startsWith("http")
+  const rawPath = requestUrl.startsWith("http")
     ? (() => {
         const parsed = new URL(requestUrl);
         return `${parsed.pathname}${parsed.search}`;
       })()
     : requestUrl;
-  const path = normalizedPath.startsWith("/api/azuracast")
-    ? normalizedPath
-    : `/api/azuracast${normalizedPath.startsWith("/") ? "" : "/"}${normalizedPath}`;
+  const path = toProxyUrl(rawPath);
+
+  console.debug("[submitSongRequest] posting to:", path, "(raw input:", requestUrl, ")");
 
   const response = await fetch(path, {
     method: "POST",
@@ -261,6 +403,29 @@ export async function submitSongRequest(
       Pragma: "no-cache",
     },
   });
+
+  // AzuraCast throws CannotCompleteActionException (and similar) as HTTP 500
+  // with a text/html body even for routine user-facing errors (e.g. "played
+  // too recently").  Parse the message out and re-throw it so the UI can show
+  // something useful.
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    const body = await response.text();
+
+    // AzuraCast error format: "Error: Cannot submit request: <msg> on /var/…"
+    // Extract the human-readable part before the file-path suffix.
+    const extracted = extractAzuraCastError(body);
+
+    console.warn("[submitSongRequest] non-JSON response from AzuraCast", {
+      status: response.status,
+      contentType,
+      path,
+      extracted,
+      body: body.slice(0, 800),
+    });
+
+    throw new Error(extracted);
+  }
 
   const payload = (await response.json()) as AzuraCastStatusResponse & {
     formatted_message?: string;

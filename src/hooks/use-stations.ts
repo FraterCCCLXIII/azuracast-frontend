@@ -14,6 +14,7 @@ export function useStations() {
         const list = await fetchStations(controller.signal);
         setStations(list);
       } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return;
         console.warn("[useStations] Failed to load stations:", err);
         setStations([]);
       }

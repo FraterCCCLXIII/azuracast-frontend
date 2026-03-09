@@ -18,20 +18,31 @@ function buildUpstreamUrl(request: NextRequest, path: string[]): URL {
   return upstreamUrl;
 }
 
-function copyResponseHeaders(source: Headers): Headers {
+function copyResponseHeaders(source: Headers, isRangeRequest: boolean): Headers {
   const headers = new Headers();
-  const allowed = [
+
+  const always = [
     "content-type",
     "cache-control",
     "etag",
     "last-modified",
     "expires",
+    "content-length",
+    "accept-ranges",
   ];
 
-  for (const key of allowed) {
+  // Include range-specific headers when the client sent a Range request.
+  const rangeOnly = ["content-range"];
+
+  for (const key of always) {
     const value = source.get(key);
-    if (value) {
-      headers.set(key, value);
+    if (value) headers.set(key, value);
+  }
+
+  if (isRangeRequest) {
+    for (const key of rangeOnly) {
+      const value = source.get(key);
+      if (value) headers.set(key, value);
     }
   }
 
@@ -47,9 +58,18 @@ async function proxyRequest(
 
   const requestHeaders = new Headers();
   const contentType = request.headers.get("content-type");
-  if (contentType) {
-    requestHeaders.set("content-type", contentType);
-  }
+  if (contentType) requestHeaders.set("content-type", contentType);
+
+  // Forward the browser User-Agent so AzuraCast doesn't classify the server-side
+  // proxy request as a search engine crawler (which blocks song requests).
+  const userAgent = request.headers.get("user-agent");
+  if (userAgent) requestHeaders.set("user-agent", userAgent);
+
+  // Forward Range header so the upstream can honour partial-content requests
+  // (required for audio seeking in browsers).
+  const range = request.headers.get("range");
+  const isRangeRequest = range !== null;
+  if (isRangeRequest) requestHeaders.set("range", range);
 
   const init: RequestInit = {
     method: request.method,
@@ -58,14 +78,17 @@ async function proxyRequest(
   };
 
   if (request.method !== "GET" && request.method !== "HEAD") {
-    init.body = await request.arrayBuffer();
+    const body = await request.arrayBuffer();
+    if (body.byteLength > 0) {
+      init.body = body;
+    }
   }
 
   const upstream = await fetch(upstreamUrl.toString(), init);
 
   return new NextResponse(upstream.body, {
     status: upstream.status,
-    headers: copyResponseHeaders(upstream.headers),
+    headers: copyResponseHeaders(upstream.headers, isRangeRequest),
   });
 }
 

@@ -5,8 +5,8 @@ import { useNowPlaying } from "@/hooks/use-now-playing";
 import { useRequests } from "@/hooks/use-requests";
 import { useStations } from "@/hooks/use-stations";
 import { useAudioAnalyser } from "@/hooks/use-audio-analyser";
-import { AzuraCastStation } from "@/types/azuracast";
-import { submitSongRequest } from "@/lib/azuracast/client";
+import { AzuraCastSong, AzuraCastStation } from "@/types/azuracast";
+import { findRequestableSong, submitSongRequest } from "@/lib/azuracast/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -46,10 +46,17 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { ShareModal } from "@/components/player/share-modal";
+import { SongDetailModal, type SelectedSongEntry } from "@/components/player/song-detail-modal";
 
 interface ListenerDashboardProps {
   stationShortName?: string;
   urlStation?: string;
+  /** AzuraCast song ID present in a shared URL — auto-opens the song detail modal. */
+  urlSongId?: string;
+  /** Song title from a shared URL (used to search the requestable list). */
+  urlSongTitle?: string;
+  /** Song artist from a shared URL. */
+  urlSongArtist?: string;
 }
 
 interface StreamOption {
@@ -142,7 +149,13 @@ function StationWordmark() {
   );
 }
 
-export function ListenerDashboard({ stationShortName, urlStation }: ListenerDashboardProps) {
+export function ListenerDashboard({
+  stationShortName,
+  urlStation,
+  urlSongId,
+  urlSongTitle,
+  urlSongArtist,
+}: ListenerDashboardProps) {
   const [selectedStation, setSelectedStation] = useState<string>(() => {
     if (typeof window === "undefined") {
       return urlStation ?? stationShortName ?? "";
@@ -177,6 +190,9 @@ export function ListenerDashboard({ stationShortName, urlStation }: ListenerDash
   const [liveStatsOpen, setLiveStatsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [submittingRequestId, setSubmittingRequestId] = useState<string | null>(null);
+  const [songDetailOpen, setSongDetailOpen] = useState(false);
+  const [selectedSongEntry, setSelectedSongEntry] = useState<SelectedSongEntry | null>(null);
+  const [shareUrl, setShareUrl] = useState<string | undefined>(undefined);
   const [backgroundArtwork, setBackgroundArtwork] = useState("");
   const [nextBackgroundArtwork, setNextBackgroundArtwork] = useState<string | null>(null);
   const [artworkCrossfading, setArtworkCrossfading] = useState(false);
@@ -184,6 +200,7 @@ export function ListenerDashboard({ stationShortName, urlStation }: ListenerDash
   const crossfadeStartRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const analyserRef = useAudioAnalyser(AUDIO_REACTIVE ? audioRef : { current: null });
+  const urlSongHandledRef = useRef(false);
 
   const stations = useStations();
 
@@ -196,6 +213,22 @@ export function ListenerDashboard({ stationShortName, urlStation }: ListenerDash
     url.searchParams.set("station", selectedStation);
     window.history.replaceState(null, "", url.toString());
   }, [selectedStation]);
+
+  // Sync the open song detail modal into the URL so shared links re-open it.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (songDetailOpen && selectedSongEntry?.song) {
+      const { song } = selectedSongEntry;
+      url.searchParams.set("song", song.id);
+      url.searchParams.set("song_t", song.title);
+      url.searchParams.set("song_a", song.artist);
+    } else {
+      url.searchParams.delete("song");
+      url.searchParams.delete("song_t");
+      url.searchParams.delete("song_a");
+    }
+    window.history.replaceState(null, "", url.toString());
+  }, [songDetailOpen, selectedSongEntry]);
 
   useEffect(() => {
     const savedVolume = window.localStorage.getItem(PLAYER_VOLUME_KEY);
@@ -243,6 +276,72 @@ export function ListenerDashboard({ stationShortName, urlStation }: ListenerDash
   const trackDuration = currentTrack?.duration ?? 0;
   const stationId = station?.id;
   const requestsEnabled = station?.requests_enabled ?? false;
+
+  // When a shared song URL is opened, auto-open the detail modal once nowPlaying loads.
+  useEffect(() => {
+    if (urlSongHandledRef.current || !urlSongId || !nowPlaying) return;
+    urlSongHandledRef.current = true;
+
+    // 1. Check the currently playing track.
+    if (nowPlaying.now_playing.song.id === urlSongId) {
+      setSelectedSongEntry({ song: nowPlaying.now_playing.song, track: nowPlaying.now_playing });
+      setSongDetailOpen(true);
+      return;
+    }
+
+    // 2. Check recent history.
+    const historyMatch = nowPlaying.song_history?.find((e) => e.song.id === urlSongId);
+    if (historyMatch) {
+      setSelectedSongEntry({ song: historyMatch.song, track: historyMatch });
+      setSongDetailOpen(true);
+      return;
+    }
+
+    // 3. Search the requestable songs list (needs title for the search phrase).
+    const sid = nowPlaying.station.id;
+    if (sid && urlSongTitle) {
+      findRequestableSong(sid, urlSongId, urlSongTitle)
+        .then((requestItem) => {
+          if (requestItem) {
+            setSelectedSongEntry({ song: requestItem.song, requestItem });
+          } else {
+            // Build a minimal song from URL params and still open the modal.
+            const minimalSong: AzuraCastSong = {
+              id: urlSongId,
+              text:
+                urlSongTitle && urlSongArtist
+                  ? `${urlSongArtist} - ${urlSongTitle}`
+                  : (urlSongTitle ?? urlSongId),
+              title: urlSongTitle ?? "",
+              artist: urlSongArtist ?? "",
+              art: null,
+            };
+            setSelectedSongEntry({ song: minimalSong });
+          }
+          setSongDetailOpen(true);
+        })
+        .catch(() => {
+          toast.error("Could not load the shared song.");
+        });
+      return;
+    }
+
+    // 4. Fallback: open with whatever we have from URL params.
+    if (urlSongTitle) {
+      const minimalSong: AzuraCastSong = {
+        id: urlSongId,
+        text:
+          urlSongTitle && urlSongArtist
+            ? `${urlSongArtist} - ${urlSongTitle}`
+            : urlSongTitle,
+        title: urlSongTitle,
+        artist: urlSongArtist ?? "",
+        art: null,
+      };
+      setSelectedSongEntry({ song: minimalSong });
+      setSongDetailOpen(true);
+    }
+  }, [urlSongId, urlSongTitle, urlSongArtist, nowPlaying]);
 
   const {
     items: requestItems,
@@ -410,6 +509,12 @@ export function ListenerDashboard({ stationShortName, urlStation }: ListenerDash
     ].sort((a, b) => a.name.localeCompare(b.name));
   }, [station, stations]);
 
+  const openSongDetail = (entry: SelectedSongEntry) => {
+    setShareUrl(undefined);
+    setSelectedSongEntry(entry);
+    setSongDetailOpen(true);
+  };
+
   const handleSubmitRequest = async (requestId: string, requestUrl: string) => {
     setSubmittingRequestId(requestId);
     try {
@@ -528,14 +633,19 @@ export function ListenerDashboard({ stationShortName, urlStation }: ListenerDash
                 <div className="space-y-3">
                   {history.map((entry) => (
                     <div key={`${entry.played_at}-${entry.song.id}`} className="space-y-2">
-                      <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        className="group flex w-full items-center gap-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-label={`View details for ${entry.song.title}`}
+                        onClick={() => openSongDetail({ song: entry.song, track: entry })}
+                      >
                         <div className="h-12 w-12 shrink-0 overflow-hidden rounded bg-muted">
                           {entry.song.art ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={entry.song.art}
                               alt={entry.song.text}
-                              className="h-full w-full object-cover"
+                              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
                             />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
@@ -544,13 +654,15 @@ export function ListenerDashboard({ stationShortName, urlStation }: ListenerDash
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium leading-snug">{entry.song.title}</p>
+                          <p className="truncate text-sm font-medium leading-snug group-hover:underline group-hover:underline-offset-1">
+                            {entry.song.title}
+                          </p>
                           <p className="truncate text-xs text-muted-foreground">{entry.song.artist}</p>
                           <p className="mt-0.5 text-[10px] tabular-nums text-muted-foreground/50">
                             {formatTimeAgo(entry.played_at)}
                           </p>
                         </div>
-                      </div>
+                      </button>
                       <Separator />
                     </div>
                   ))}
@@ -767,20 +879,30 @@ export function ListenerDashboard({ stationShortName, urlStation }: ListenerDash
 
                 <div className="flex flex-col gap-5 sm:flex-row">
                   <div className="flex shrink-0 flex-col gap-2">
-                    <div className="h-48 w-full overflow-hidden rounded-lg bg-muted sm:h-56 sm:w-56">
+                    <button
+                      type="button"
+                      className="group h-48 w-full overflow-hidden rounded-lg bg-muted sm:h-56 sm:w-56 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label={currentSong ? `View details for ${currentSong.title}` : undefined}
+                      disabled={!currentSong}
+                      onClick={() => {
+                        if (currentSong && currentTrack) {
+                          openSongDetail({ song: currentSong, track: currentTrack });
+                        }
+                      }}
+                    >
                       {currentSong?.art ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={currentSong.art}
                           alt={currentSong.text}
-                          className="h-full w-full object-cover"
+                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                         />
                       ) : (
                         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                           No artwork
                         </div>
                       )}
-                    </div>
+                    </button>
                     <div className="rounded-md bg-muted/30 px-3 py-2">
                       <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
                         Playing next
@@ -805,12 +927,24 @@ export function ListenerDashboard({ stationShortName, urlStation }: ListenerDash
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">
                         Current track
                       </p>
-                      <h2 className="text-xl font-semibold leading-tight sm:text-2xl">
-                        {currentSong?.title ?? "No track loaded"}
-                      </h2>
-                      <p className="text-base text-muted-foreground">
-                        {currentSong?.artist ?? "Unknown artist"}
-                      </p>
+                      <button
+                        type="button"
+                        className="group block text-left focus-visible:outline-none"
+                        aria-label={currentSong ? `View details for ${currentSong.title}` : undefined}
+                        disabled={!currentSong}
+                        onClick={() => {
+                          if (currentSong && currentTrack) {
+                            openSongDetail({ song: currentSong, track: currentTrack });
+                          }
+                        }}
+                      >
+                        <h2 className="text-xl font-semibold leading-tight sm:text-2xl group-hover:underline group-hover:underline-offset-2">
+                          {currentSong?.title ?? "No track loaded"}
+                        </h2>
+                        <p className="mt-1 text-base text-muted-foreground group-hover:text-foreground">
+                          {currentSong?.artist ?? "Unknown artist"}
+                        </p>
+                      </button>
                       {nowPlaying?.live?.is_live && nowPlaying.live.streamer_name ? (
                         <p className="text-sm font-medium text-primary">
                           Live by {nowPlaying.live.streamer_name}
@@ -996,26 +1130,33 @@ export function ListenerDashboard({ stationShortName, urlStation }: ListenerDash
                                         key={item.request_id}
                                         className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between"
                                       >
-                                        <div className="flex items-center gap-3">
-                                          <div className="h-10 w-10 overflow-hidden rounded bg-muted">
+                                        <button
+                                          type="button"
+                                          className="group flex items-center gap-3 text-left focus-visible:outline-none"
+                                          aria-label={`View details for ${item.song.title}`}
+                                          onClick={() =>
+                                            openSongDetail({ song: item.song, requestItem: item })
+                                          }
+                                        >
+                                          <div className="h-10 w-10 shrink-0 overflow-hidden rounded bg-muted">
                                             {item.song.art ? (
                                               // eslint-disable-next-line @next/next/no-img-element
                                               <img
                                                 src={item.song.art}
                                                 alt={item.song.text}
-                                                className="h-full w-full object-cover"
+                                                className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
                                               />
                                             ) : null}
                                           </div>
                                           <div>
-                                            <p className="text-sm font-medium leading-snug">
+                                            <p className="text-sm font-medium leading-snug group-hover:underline group-hover:underline-offset-1">
                                               {item.song.title}
                                             </p>
                                             <p className="text-xs text-muted-foreground">
                                               {item.song.artist}
                                             </p>
                                           </div>
-                                        </div>
+                                        </button>
                                         <Button
                                           type="button"
                                           size="sm"
@@ -1072,7 +1213,10 @@ export function ListenerDashboard({ stationShortName, urlStation }: ListenerDash
                         size="icon"
                         className="rounded-full bg-foreground/5 hover:bg-foreground/8 shadow-none"
                         aria-label="Share station"
-                        onClick={() => setShareModalOpen(true)}
+                        onClick={() => {
+                          setShareUrl(undefined);
+                          setShareModalOpen(true);
+                        }}
                       >
                         <Share2 />
                       </Button>
@@ -1092,11 +1236,41 @@ export function ListenerDashboard({ stationShortName, urlStation }: ListenerDash
 
         <ShareModal
           open={shareModalOpen}
-          onOpenChange={setShareModalOpen}
+          onOpenChange={(open) => {
+            setShareModalOpen(open);
+            if (!open) setShareUrl(undefined);
+          }}
           stationName={station?.name}
-          songTitle={currentSong?.title}
-          songArtist={currentSong?.artist}
-          songArt={currentSong?.art}
+          songId={shareUrl ? selectedSongEntry?.song.id : currentSong?.id}
+          songTitle={shareUrl ? selectedSongEntry?.song.title : currentSong?.title}
+          songArtist={shareUrl ? selectedSongEntry?.song.artist : currentSong?.artist}
+          songArt={shareUrl ? (selectedSongEntry?.song.art ?? null) : (currentSong?.art ?? null)}
+          shareUrl={shareUrl}
+        />
+
+        <SongDetailModal
+          open={songDetailOpen}
+          onOpenChange={setSongDetailOpen}
+          entry={selectedSongEntry}
+          stationId={stationId}
+          requestsEnabled={requestsEnabled}
+          onPauseLiveStream={() => {
+            if (audioRef.current) audioRef.current.pause();
+            setIsPlaying(false);
+          }}
+          onShare={() => {
+            // Capture the song URL *before* closing the modal so the URL
+            // sync effect doesn't strip the song params before ShareModal reads them.
+            if (selectedSongEntry?.song) {
+              const url = new URL(window.location.href);
+              url.searchParams.set("song", selectedSongEntry.song.id);
+              url.searchParams.set("song_t", selectedSongEntry.song.title);
+              url.searchParams.set("song_a", selectedSongEntry.song.artist);
+              setShareUrl(url.toString());
+            }
+            setSongDetailOpen(false);
+            setShareModalOpen(true);
+          }}
         />
 
         <audio

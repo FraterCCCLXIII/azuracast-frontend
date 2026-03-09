@@ -484,11 +484,12 @@ export function LiquidGradientBackground({
     };
 
     const freqData = new Uint8Array(128);
-    const clock = new THREE.Clock();
+    const timer = new THREE.Timer();
     let animFrameId: number;
 
-    const tick = () => {
-      const delta = Math.min(clock.getDelta(), 0.1);
+    const tick = (timestamp: number) => {
+      timer.update(timestamp);
+      const delta = Math.min(timer.getDelta(), 0.1);
       uniforms.uTime.value += delta;
 
       // Check for external cycle trigger
@@ -544,7 +545,7 @@ export function LiquidGradientBackground({
       animFrameId = requestAnimationFrame(tick);
     };
 
-    tick();
+    animFrameId = requestAnimationFrame(tick);
 
     const onMouseMove = (ev: MouseEvent) => addTouch({ x: ev.clientX / window.innerWidth, y: 1 - ev.clientY / window.innerHeight });
     const onTouchMove = (ev: TouchEvent) => {
@@ -567,6 +568,7 @@ export function LiquidGradientBackground({
 
     return () => {
       cancelAnimationFrame(animFrameId);
+      timer.dispose();
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("touchmove", onTouchMove);
       window.removeEventListener("resize", onResize);
