@@ -190,6 +190,7 @@ export function ListenerDashboard({
   const [artworkCrossfading, setArtworkCrossfading] = useState(false);
   const crossfadeTimeoutRef = useRef<number | null>(null);
   const crossfadeStartRef = useRef<number | null>(null);
+  const isLoadingRef = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const analyserRef = useAudioAnalyser(AUDIO_REACTIVE ? audioRef : { current: null });
   const urlSongHandledRef = useRef(false);
@@ -255,6 +256,10 @@ export function ListenerDashboard({
     pollMs: 20000,
     useSse: true,
   });
+
+  // Keep a ref in sync so the artwork crossfade effect can read isLoading
+  // without adding it to the dependency array (avoids a dep-size change error).
+  isLoadingRef.current = isLoading;
 
   const station = nowPlaying?.station;
   const currentTrack = nowPlaying?.now_playing;
@@ -382,7 +387,7 @@ export function ListenerDashboard({
 
     // While loading new station data, keep the current artwork visible rather
     // than crossfading to a black/empty background mid-switch.
-    if (!artworkUrl && isLoading && backgroundArtwork) {
+    if (!artworkUrl && isLoadingRef.current && backgroundArtwork) {
       return;
     }
 
@@ -409,7 +414,7 @@ export function ListenerDashboard({
       setArtworkCrossfading(false);
       crossfadeTimeoutRef.current = null;
     }, ARTWORK_CROSSFADE_MS + 20);
-  }, [artworkUrl, backgroundArtwork, nextBackgroundArtwork, isLoading]);
+  }, [artworkUrl, backgroundArtwork, nextBackgroundArtwork]);
 
   useEffect(() => {
     return () => {
