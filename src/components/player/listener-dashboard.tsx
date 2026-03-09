@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { GlassFilter } from "@/components/ui/glass-filter";
 import { LiquidGradientBackground, type GradientScheme } from "@/components/ui/liquid-gradient-background";
-import { EllipsisVertical, History, ListPlus, Pause, Play, Radio, Share2, Volume2, VolumeX, X } from "lucide-react";
+import { History, ListPlus, Pause, Play, Radio, Share2, Volume2, VolumeX, X } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -22,13 +22,6 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import {
@@ -188,7 +181,6 @@ export function ListenerDashboard({
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const [liveStatsOpen, setLiveStatsOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [submittingRequestId, setSubmittingRequestId] = useState<string | null>(null);
   const [songDetailOpen, setSongDetailOpen] = useState(false);
   const [selectedSongEntry, setSelectedSongEntry] = useState<SelectedSongEntry | null>(null);
@@ -676,10 +668,54 @@ export function ListenerDashboard({
         <div className="flex flex-1 flex-col">
         <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center gap-6 px-4 py-6 sm:px-6 lg:py-10">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
+          <div className="flex items-center gap-4 flex-wrap">
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
               <StationWordmark />
             </h1>
+            {stationOptions.length > 1 && (
+              <nav className="flex items-center gap-1.5" aria-label="Station switcher">
+                {stationOptions.map((entry) => {
+                  const isActive = selectedStation === entry.shortcode;
+                  return (
+                    <button
+                      key={entry.shortcode}
+                      type="button"
+                      aria-pressed={isActive}
+                      onClick={() => {
+                        if (isActive) return;
+                        setSelectedStation(entry.shortcode);
+                        setIsPlaying(false);
+                        setRequestPage(1);
+                        setRequestSearch("");
+                        setRequestSearchInput("");
+                        const savedStream = window.localStorage.getItem(
+                          getStreamStorageKey(entry.shortcode)
+                        );
+                        setActiveStreamUrl(savedStream ?? "");
+                        if (audioRef.current) {
+                          audioRef.current.pause();
+                        }
+                      }}
+                      className={[
+                        "relative px-3 py-1.5 text-sm font-medium rounded-xl transition-all duration-200 overflow-hidden",
+                        isActive
+                          ? "bg-white/40 text-foreground shadow-sm"
+                          : "bg-white/15 text-foreground/70 hover:bg-white/25 hover:text-foreground",
+                      ].join(" ")}
+                      style={{
+                        backdropFilter: "url(#glass-filter) blur(12px) saturate(180%)",
+                        WebkitBackdropFilter: "blur(12px) saturate(180%)",
+                        boxShadow: isActive
+                          ? "0px 1px 5px 0px rgba(0,0,0,0.1), 0px 4px 12px 0px rgba(0,0,0,0.07)"
+                          : "none",
+                      }}
+                    >
+                      {entry.name}
+                    </button>
+                  );
+                })}
+              </nav>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <Popover open={liveStatsOpen} onOpenChange={setLiveStatsOpen}>
@@ -731,123 +767,6 @@ export function ListenerDashboard({
                 {`Live DJ${nowPlaying.live.streamer_name ? `: ${nowPlaying.live.streamer_name}` : ""}`}
               </Badge>
             ) : null}
-            <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full hover:bg-foreground/8 shadow-none"
-                  aria-label="Station and stream settings"
-                >
-                  <EllipsisVertical />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                align="end"
-                className="w-80 space-y-4"
-                onOpenAutoFocus={(e) => e.preventDefault()}
-                onInteractOutside={(e) => {
-                  // Keep open while any nested Select dropdown is visible (its portal
-                  // is outside the popover's DOM, so Radix fires onInteractOutside).
-                  if (document.querySelector("[data-slot='select-content']")) {
-                    e.preventDefault();
-                    return;
-                  }
-                  const target = e.target as Element | null;
-                  if (target?.closest("[data-radix-popper-content-wrapper]")) {
-                    e.preventDefault();
-                  }
-                }}
-              >
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Station</p>
-                  <Select
-                    value={selectedStation}
-                    onValueChange={(value) => {
-                      setSelectedStation(value);
-                      setIsPlaying(false);
-                      setRequestPage(1);
-                      setRequestSearch("");
-                      setRequestSearchInput("");
-                      const savedStream = window.localStorage.getItem(
-                        getStreamStorageKey(value)
-                      );
-                      setActiveStreamUrl(savedStream ?? "");
-                      if (audioRef.current) {
-                        audioRef.current.pause();
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select station" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stationOptions.length ? (
-                        stationOptions.map((entry) => (
-                          <SelectItem key={entry.shortcode} value={entry.shortcode}>
-                            {entry.name}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem value="__no-station" disabled>
-                          No stations available yet
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Stream</p>
-                  <Select
-                    value={effectiveStreamUrl ?? ""}
-                    onValueChange={(value) => {
-                      setActiveStreamUrl(value);
-                      if (selectedStation) {
-                        window.localStorage.setItem(
-                          getStreamStorageKey(selectedStation),
-                          value
-                        );
-                      }
-                      setIsPlaying(false);
-                      if (audioRef.current) {
-                        audioRef.current.pause();
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select stream" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {streamOptions.length ? (
-                        streamOptions.map((stream) => (
-                          <SelectItem key={stream.url} value={stream.url}>
-                            {stream.title}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem value="__no-stream" disabled>
-                          No stream options available
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {effectiveStreamUrl ? (
-                  <>
-                    <Separator />
-                    <a
-                      href={effectiveStreamUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
-                    >
-                      Open stream URL
-                    </a>
-                  </>
-                ) : null}
-              </PopoverContent>
-            </Popover>
           </div>
         </header>
 
@@ -881,7 +800,7 @@ export function ListenerDashboard({
                   <div className="flex shrink-0 flex-col gap-2">
                     <button
                       type="button"
-                      className="group h-48 w-full overflow-hidden rounded-lg bg-muted sm:h-56 sm:w-56 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="group aspect-square w-40 overflow-hidden rounded-lg bg-muted sm:aspect-auto sm:h-56 sm:w-56 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       aria-label={currentSong ? `View details for ${currentSong.title}` : undefined}
                       disabled={!currentSong}
                       onClick={() => {
@@ -903,7 +822,7 @@ export function ListenerDashboard({
                         </div>
                       )}
                     </button>
-                    <div className="rounded-md bg-muted/30 px-3 py-2">
+                    <div className="hidden sm:block rounded-md bg-muted/30 px-3 py-2">
                       <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
                         Playing next
                       </p>
@@ -1224,6 +1143,23 @@ export function ListenerDashboard({
                       {audioError ? (
                         <p className="text-sm text-destructive">{audioError}</p>
                       ) : null}
+                      <div className="sm:hidden rounded-md bg-muted/30 px-3 py-2">
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                          Playing next
+                        </p>
+                        {nowPlaying?.playing_next?.song ? (
+                          <>
+                            <p className="mt-0.5 truncate text-sm font-medium leading-snug">
+                              {nowPlaying.playing_next.song.title}
+                            </p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {nowPlaying.playing_next.song.artist}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="mt-0.5 text-xs text-muted-foreground">No next track in queue.</p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
