@@ -252,16 +252,6 @@ export function ListenerDashboard({
     window.localStorage.setItem(PLAYER_VOLUME_KEY, String(volume));
   }, [hasHydratedVolume, volume]);
 
-  useEffect(() => {
-    if (!resumeOnStationChange.current) return;
-    if (!effectiveStreamUrl || !audioRef.current) return;
-    resumeOnStationChange.current = false;
-    setAudioError(null);
-    audioRef.current.play().catch(() => {
-      setAudioError("Unable to start playback in this browser yet.");
-    });
-  }, [effectiveStreamUrl]);
-
   const { nowPlaying, isLoading, error, refresh } = useNowPlaying({
     stationShortName: selectedStation || stationShortName,
     pollMs: 20000,
@@ -493,6 +483,16 @@ export function ListenerDashboard({
     const fallback = streamOptions.find((entry) => entry.url === defaultUrl)?.url;
     return fallback ?? streamOptions[0]?.url ?? null;
   }, [activeStreamUrl, station, streamOptions]);
+
+  useEffect(() => {
+    if (!resumeOnStationChange.current) return;
+    if (!effectiveStreamUrl || !audioRef.current) return;
+    resumeOnStationChange.current = false;
+    setAudioError(null);
+    audioRef.current.play().catch(() => {
+      setAudioError("Unable to start playback in this browser yet.");
+    });
+  }, [effectiveStreamUrl]);
 
   const progressPercent = useMemo(() => {
     if (!trackDuration) {
