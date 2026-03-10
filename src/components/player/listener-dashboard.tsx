@@ -820,7 +820,7 @@ export function ListenerDashboard({
                 ) : null}
 
                 <div className="flex flex-col gap-5 sm:flex-row">
-                  <div className="flex shrink-0 flex-col gap-2">
+                  <div className="flex w-40 shrink-0 flex-col gap-2 sm:w-56">
                     <button
                       type="button"
                       className="group aspect-square w-40 overflow-hidden rounded-lg bg-muted sm:aspect-auto sm:h-56 sm:w-56 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -845,16 +845,16 @@ export function ListenerDashboard({
                         </div>
                       )}
                     </button>
-                    <div className="hidden sm:block rounded-md bg-muted/30 px-3 py-2">
+                    <div className="hidden overflow-hidden rounded-md bg-muted/30 px-3 py-2 sm:block">
                       <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
                         Playing next
                       </p>
                       {nowPlaying?.playing_next?.song ? (
                         <>
-                          <p className="mt-0.5 truncate text-sm font-medium leading-snug">
+                          <p className="mt-0.5 break-words text-sm font-medium leading-snug">
                             {nowPlaying.playing_next.song.title}
                           </p>
-                          <p className="truncate text-xs text-muted-foreground">
+                          <p className="break-words text-xs text-muted-foreground">
                             {nowPlaying.playing_next.song.artist}
                           </p>
                         </>
@@ -1166,16 +1166,16 @@ export function ListenerDashboard({
                       {audioError ? (
                         <p className="text-sm text-destructive">{audioError}</p>
                       ) : null}
-                      <div className="sm:hidden rounded-md bg-muted/30 px-3 py-2">
+                      <div className="overflow-hidden rounded-md bg-muted/30 px-3 py-2 sm:hidden">
                         <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
                           Playing next
                         </p>
                         {nowPlaying?.playing_next?.song ? (
                           <>
-                            <p className="mt-0.5 truncate text-sm font-medium leading-snug">
+                            <p className="mt-0.5 break-words text-sm font-medium leading-snug">
                               {nowPlaying.playing_next.song.title}
                             </p>
-                            <p className="truncate text-xs text-muted-foreground">
+                            <p className="break-words text-xs text-muted-foreground">
                               {nowPlaying.playing_next.song.artist}
                             </p>
                           </>
