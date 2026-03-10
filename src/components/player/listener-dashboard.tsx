@@ -40,6 +40,7 @@ import {
 import { toast } from "sonner";
 import { ShareModal } from "@/components/player/share-modal";
 import { SongDetailModal, type SelectedSongEntry } from "@/components/player/song-detail-modal";
+import { SiteFooter } from "@/components/player/site-footer";
 
 interface ListenerDashboardProps {
   stationShortName?: string;
@@ -1244,6 +1245,7 @@ export function ListenerDashboard({
         </div>{/* end flex-1 main column */}
       </div>{/* end flex min-h-screen z-10 row */}
       <GlassFilter />
+      <SiteFooter />
     </div>
   );
 }
