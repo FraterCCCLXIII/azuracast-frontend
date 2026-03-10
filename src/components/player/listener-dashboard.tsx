@@ -194,6 +194,7 @@ export function ListenerDashboard({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const analyserRef = useAudioAnalyser(AUDIO_REACTIVE ? audioRef : { current: null });
   const urlSongHandledRef = useRef(false);
+  const resumeOnStationChange = useRef(false);
 
   const stations = useStations();
 
@@ -250,6 +251,16 @@ export function ListenerDashboard({
     audioRef.current.volume = volume / 100;
     window.localStorage.setItem(PLAYER_VOLUME_KEY, String(volume));
   }, [hasHydratedVolume, volume]);
+
+  useEffect(() => {
+    if (!resumeOnStationChange.current) return;
+    if (!effectiveStreamUrl || !audioRef.current) return;
+    resumeOnStationChange.current = false;
+    setAudioError(null);
+    audioRef.current.play().catch(() => {
+      setAudioError("Unable to start playback in this browser yet.");
+    });
+  }, [effectiveStreamUrl]);
 
   const { nowPlaying, isLoading, error, refresh } = useNowPlaying({
     stationShortName: selectedStation || stationShortName,
@@ -694,6 +705,7 @@ export function ListenerDashboard({
                       aria-pressed={isActive}
                       onClick={() => {
                         if (isActive) return;
+                        resumeOnStationChange.current = isPlaying;
                         setSelectedStation(entry.shortcode);
                         setIsPlaying(false);
                         setRequestPage(1);
