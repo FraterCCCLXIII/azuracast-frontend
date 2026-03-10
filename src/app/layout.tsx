@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AzuraCast Listener Frontend",
-  description: "Custom listener experience powered by AzuraCast.",
+  title: "Tiru.fm - On music, silence & the ever-present Self",
+  description: "Tiru.fm — On music, silence & the ever-present Self.",
   icons: {
     icon: "/icon.svg",
   },

@@ -201,7 +201,7 @@ export function ShareModal({
         <DialogHeader>
           <DialogTitle>Share</DialogTitle>
           <DialogDescription>
-            Share this station or the current track with others.
+            Share Tiru.fm or the current track with others.
           </DialogDescription>
         </DialogHeader>
 
